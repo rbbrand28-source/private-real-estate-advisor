@@ -1,0 +1,15 @@
+private-real-estate-advisor/
+├── api/
+│   └── chat.ts
+├── src/
+│   ├── App.tsx
+│   ├── main.tsx
+│   ├── index.css
+│   └── components/
+│       └── Chatbot.tsx
+├── index.html
+├── package.json
+├── vite.config.ts
+├── tailwind.config.js
+├── postcss.config.js
+└── tsconfig.json
