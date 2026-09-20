@@ -1,6 +1,8 @@
 import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 
+export const maxDuration = 30; // Important for Vercel
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
@@ -28,10 +30,13 @@ Focus on helping genuine buyers and filtering casual visitors politely.`,
 
     return result.toDataStreamResponse();
   } catch (error: any) {
-    console.error(error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    console.error('Chat API Error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message || 'Something went wrong' }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   }
 }
