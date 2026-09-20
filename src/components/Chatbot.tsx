@@ -30,7 +30,7 @@ export default function Chatbot() {
       return;
     }
 
-    // Handle assistant message only when it is fully received
+    // Handle assistant message only when fully received
     if (
       lastMessage.role === 'assistant' &&
       !processedIds.current.has(lastMessage.id) &&
@@ -40,18 +40,27 @@ export default function Chatbot() {
       isProcessing.current = true;
       processedIds.current.add(lastMessage.id);
 
-      // Step 1: Wait 2.8 seconds (reading time) - no typing yet
+      const text = lastMessage.content || '';
+      const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+
+      // Realistic typing speed: 100 words per minute
+      let typingDuration = Math.round((wordCount / 100) * 60 * 1000);
+
+      // Set limits
+      typingDuration = Math.max(2500, Math.min(typingDuration, 12000));
+
+      // Step 1: Reading delay (2.8 seconds)
       setTimeout(() => {
         // Step 2: Show typing indicator
         setShowTyping(true);
 
-        // Step 3: Keep typing for 1.8 seconds, then show full reply
+        // Step 3: Keep typing according to word count
         setTimeout(() => {
           setShowTyping(false);
           setVisibleMessages((prev) => [...prev, lastMessage]);
           isProcessing.current = false;
-        }, 1800);
-      }, 2800);
+        }, typingDuration);
+      }, 2500);
     }
   }, [messages, isLoading]);
 
