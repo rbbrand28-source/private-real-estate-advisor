@@ -1,15 +1,15 @@
 import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 
-export const maxDuration = 30; // Important for Vercel
+export const maxDuration = 30;
 
-export default async function handler(req: Request) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages } = req.body;
 
     const result = streamText({
       model: google('gemini-3.5-flash'),
@@ -28,15 +28,10 @@ Focus on helping genuine buyers and filtering casual visitors politely.`,
       messages,
     });
 
-    return result.toDataStreamResponse();
+    // This is the correct way for classic Node.js style on Vercel
+    result.pipeDataStreamToResponse(res);
   } catch (error: any) {
     console.error('Chat API Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message || 'Something went wrong' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    res.status(500).json({ error: error.message || 'Something went wrong' });
   }
 }
