@@ -4,78 +4,36 @@ import { useChat } from '@ai-sdk/react';
 import { useEffect, useRef, useState } from 'react';
 
 export default function Chatbot() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat();
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isThinking, setIsThinking] = useState(false);
-  const [displayedMessages, setDisplayedMessages] = useState<any[]>([]);
+  const [showTyping, setShowTyping] = useState(false);
+  const [pendingReply, setPendingReply] = useState(false);
 
   // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [displayedMessages, isThinking]);
+  }, [messages, showTyping]);
 
-  // Handle new AI messages with human-like delay + multi-bubble effect
+  // Human-like delay logic
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (isLoading && !pendingReply) {
+      // User just sent a message → wait 2.5 seconds before showing typing
+      setPendingReply(true);
+      setShowTyping(false);
 
-    const lastMessage = messages[messages.length - 1];
-
-    // Only process new assistant messages
-    if (lastMessage.role === 'assistant') {
-      const alreadyDisplayed = displayedMessages.some((m) => m.id === lastMessage.id);
-      if (alreadyDisplayed) return;
-
-      // Step 1: Show "thinking" for 2.5 seconds
-      setIsThinking(true);
-
-      setTimeout(() => {
-        setIsThinking(false);
-
-        // Step 2: Split the reply into natural parts
-        const text = lastMessage.content || '';
-        const parts = text
-          .split(/(?<=[.!?])\s+/)
-          .filter((part) => part.trim().length > 0);
-
-        // If only one short part, just show it
-        if (parts.length <= 1) {
-          setDisplayedMessages((prev) => [...prev, lastMessage]);
-          return;
-        }
-
-        // Show parts one by one
-        let currentIndex = 0;
-
-        const showNextPart = () => {
-          if (currentIndex >= parts.length) return;
-
-          const partialMessage = {
-            ...lastMessage,
-            id: `\( {lastMessage.id}-part- \){currentIndex}`,
-            content: parts[currentIndex],
-          };
-
-          setDisplayedMessages((prev) => [...prev, partialMessage]);
-          currentIndex++;
-
-          if (currentIndex < parts.length) {
-            // Small delay between bubbles (like WhatsApp)
-            setTimeout(showNextPart, 1200);
-          }
-        };
-
-        showNextPart();
+      const timer = setTimeout(() => {
+        setShowTyping(true);
       }, 2500); // 2.5 seconds reading delay
+
+      return () => clearTimeout(timer);
     }
 
-    // Always show user messages immediately
-    if (lastMessage.role === 'user') {
-      const alreadyDisplayed = displayedMessages.some((m) => m.id === lastMessage.id);
-      if (!alreadyDisplayed) {
-        setDisplayedMessages((prev) => [...prev, lastMessage]);
-      }
+    if (!isLoading && pendingReply) {
+      // Reply has arrived
+      setShowTyping(false);
+      setPendingReply(false);
     }
-  }, [messages]);
+  }, [isLoading, pendingReply]);
 
   return (
     <div className="bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[620px]">
@@ -93,14 +51,14 @@ export default function Chatbot() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#faf9f7]">
-        {displayedMessages.length === 0 && (
+        {messages.length === 0 && (
           <div className="text-sm text-stone-600 leading-relaxed">
             <p className="mb-2">Good day.</p>
             <p>How may I assist you with your property search today?</p>
           </div>
         )}
 
-        {displayedMessages.map((m) => (
+        {messages.map((m) => (
           <div
             key={m.id}
             className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -117,8 +75,8 @@ export default function Chatbot() {
           </div>
         ))}
 
-        {/* Thinking / Typing Indicator */}
-        {isThinking && (
+        {/* Typing Indicator (only after delay) */}
+        {showTyping && (
           <div className="flex justify-start">
             <div className="bg-white border border-stone-200 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
               <div className="flex gap-1.5 items-center">
@@ -147,11 +105,11 @@ export default function Chatbot() {
             value={input}
             onChange={handleInputChange}
             placeholder="Type your message..."
-            disabled={isLoading || isThinking}
+            disabled={isLoading || showTyping}
           />
           <button
             type="submit"
-            disabled={isLoading || isThinking || !input.trim()}
+            disabled={isLoading || showTyping || !input.trim()}
             className="bg-[#C5A46D] text-white w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-50 transition hover:bg-[#B8944F]"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
