@@ -6,34 +6,55 @@ import { useEffect, useRef, useState } from 'react';
 export default function Chatbot() {
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const [showTyping, setShowTyping] = useState(false);
-  const [pendingReply, setPendingReply] = useState(false);
+  const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
+  const processedIds = useRef<Set<string>>(new Set());
 
   // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, showTyping]);
+  }, [visibleMessages, showTyping]);
 
-  // Human-like delay logic
+  // Main human-like logic
   useEffect(() => {
-    if (isLoading && !pendingReply) {
-      // User just sent a message → wait 2.5 seconds before showing typing
-      setPendingReply(true);
-      setShowTyping(false);
+    if (messages.length === 0) return;
 
-      const timer = setTimeout(() => {
+    const lastMessage = messages[messages.length - 1];
+
+    // Show user messages immediately
+    if (lastMessage.role === 'user' && !processedIds.current.has(lastMessage.id)) {
+      processedIds.current.add(lastMessage.id);
+      setVisibleMessages((prev) => [...prev, lastMessage]);
+      return;
+    }
+
+    // Handle assistant messages
+    if (lastMessage.role === 'assistant' && !processedIds.current.has(lastMessage.id)) {
+      // Start the human-like process only when the full message has arrived
+      if (!isLoading) {
+        processedIds.current.add(lastMessage.id);
+
+        // Step 1: Show typing indicator
         setShowTyping(true);
-      }, 2500); // 2.5 seconds reading delay
 
-      return () => clearTimeout(timer);
+        // Step 2: Hold for 2 seconds (as if still typing), then show full message
+        setTimeout(() => {
+          setShowTyping(false);
+          setVisibleMessages((prev) => [...prev, lastMessage]);
+        }, 2000);
+      }
     }
+  }, [messages, isLoading]);
 
-    if (!isLoading && pendingReply) {
-      // Reply has arrived
+  // Reset when new conversation starts
+  useEffect(() => {
+    if (messages.length === 0) {
+      setVisibleMessages([]);
+      processedIds.current.clear();
       setShowTyping(false);
-      setPendingReply(false);
     }
-  }, [isLoading, pendingReply]);
+  }, [messages.length]);
 
   return (
     <div className="bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[620px]">
@@ -51,14 +72,14 @@ export default function Chatbot() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#faf9f7]">
-        {messages.length === 0 && (
+        {visibleMessages.length === 0 && !showTyping && (
           <div className="text-sm text-stone-600 leading-relaxed">
             <p className="mb-2">Good day.</p>
             <p>How may I assist you with your property search today?</p>
           </div>
         )}
 
-        {messages.map((m) => (
+        {visibleMessages.map((m) => (
           <div
             key={m.id}
             className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -75,7 +96,7 @@ export default function Chatbot() {
           </div>
         ))}
 
-        {/* Typing Indicator (only after delay) */}
+        {/* Typing Indicator */}
         {showTyping && (
           <div className="flex justify-start">
             <div className="bg-white border border-stone-200 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
