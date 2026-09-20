@@ -10,13 +10,14 @@ export default function Chatbot() {
   const [showTyping, setShowTyping] = useState(false);
   const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
   const processedIds = useRef<Set<string>>(new Set());
+  const isProcessing = useRef(false);
 
   // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [visibleMessages, showTyping]);
 
-  // Main human-like logic
+  // Main controlled flow
   useEffect(() => {
     if (messages.length === 0) return;
 
@@ -29,30 +30,38 @@ export default function Chatbot() {
       return;
     }
 
-    // Handle assistant messages
-    if (lastMessage.role === 'assistant' && !processedIds.current.has(lastMessage.id)) {
-      // Start the human-like process only when the full message has arrived
-      if (!isLoading) {
-        processedIds.current.add(lastMessage.id);
+    // Handle assistant message only when it is fully received
+    if (
+      lastMessage.role === 'assistant' &&
+      !processedIds.current.has(lastMessage.id) &&
+      !isLoading &&
+      !isProcessing.current
+    ) {
+      isProcessing.current = true;
+      processedIds.current.add(lastMessage.id);
 
-        // Step 1: Show typing indicator
+      // Step 1: Wait 2.8 seconds (reading time) - no typing yet
+      setTimeout(() => {
+        // Step 2: Show typing indicator
         setShowTyping(true);
 
-        // Step 2: Hold for 2 seconds (as if still typing), then show full message
+        // Step 3: Keep typing for 1.8 seconds, then show full reply
         setTimeout(() => {
           setShowTyping(false);
           setVisibleMessages((prev) => [...prev, lastMessage]);
-        }, 2000);
-      }
+          isProcessing.current = false;
+        }, 1800);
+      }, 2800);
     }
   }, [messages, isLoading]);
 
-  // Reset when new conversation starts
+  // Reset on new chat
   useEffect(() => {
     if (messages.length === 0) {
       setVisibleMessages([]);
       processedIds.current.clear();
       setShowTyping(false);
+      isProcessing.current = false;
     }
   }, [messages.length]);
 
