@@ -11,16 +11,26 @@ export default function Chatbot() {
   const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
   const processedIds = useRef<Set<string>>(new Set());
   const isProcessing = useRef(false);
-  const sentPhone = useRef<string>('');
-  const sentLocations = useRef<Set<string>>(new Set());
+
+  // Lead collection
+  const leadData = useRef<{ name: string; phone: string } | null>(null);
+  const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
+  const hasSent = useRef(false);
 
   // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [visibleMessages, showTyping]);
 
-  // Send lead email
-  const sendLeadToEmail = async (name: string, phone: string, notes: string) => {
+  // Send final email
+  const sendFinalEmail = async () => {
+    if (!leadData.current || hasSent.current) return;
+    hasSent.current = true;
+
+    const summary = messages
+      .map((m) => `${m.role === 'user' ? 'Client' : 'Advisor'}: ${m.content}`)
+      .join('\n\n');
+
     try {
       await fetch('https://formspree.io/f/xzezejdr', {
         method: 'POST',
@@ -29,66 +39,70 @@ export default function Chatbot() {
           Accept: 'application/json',
         },
         body: JSON.stringify({
-          name,
-          phone,
-          notes,
-          source: 'Private Real Estate Advisor Chatbot',
+          name: leadData.current.name,
+          phone: leadData.current.phone,
+          notes: summary,
+          source: 'Private Real Estate Advisor Chatbot - Full Conversation',
         }),
       });
-      console.log('Lead sent');
+      console.log('Full conversation email sent');
     } catch (error) {
-      console.error('Failed to send lead:', error);
+      console.error('Failed to send email:', error);
     }
   };
 
-  // Smart lead detection (only important triggers)
+  // Detect Name + Phone and start inactivity timer
   useEffect(() => {
-    if (messages.length < 2) return;
+    if (messages.length === 0 || hasSent.current) return;
 
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
     if (!lastUserMsg) return;
 
     const text = lastUserMsg.content;
-    const lowerText = text.toLowerCase();
 
     // Detect phone
     const phoneMatch = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}/);
-    const phone = phoneMatch ? phoneMatch[0] : null;
+    if (!phoneMatch) return;
+
+    const phone = phoneMatch[0];
 
     // Detect name
     let name = 'Not provided';
     const nameMatch = text.match(/(?:name is|i am|this is|myself)\s+([a-zA-Z\s]{2,25})/i);
-    if (nameMatch) name = nameMatch[1].trim();
-
-    // Detect location keywords
-    const locationKeywords = [
-      'bangalore', 'bengaluru', 'mumbai', 'delhi', 'pune', 'hyderabad', 'chennai',
-      'whitefield', 'sarjapur', 'koramangala', 'indiranagar', 'hsr', 'electronic city',
-      'andheri', 'bandra', 'powai', 'gurgaon', 'noida'
-    ];
-    const foundLocation = locationKeywords.find(loc => lowerText.includes(loc));
-
-    // Create summary
-    const summary = messages
-      .slice(-10)
-      .map((m) => `${m.role === 'user' ? 'Client' : 'Advisor'}: ${m.content}`)
-      .join('\n\n');
-
-    // Case 1: First time phone number is given → Send main lead
-    if (phone && phone !== sentPhone.current) {
-      sentPhone.current = phone;
-      sendLeadToEmail(name, phone, summary);
-      return;
+    if (nameMatch) {
+      name = nameMatch[1].trim();
     }
 
-    // Case 2: New important location is mentioned (and we already have phone)
-    if (phone && foundLocation && !sentLocations.current.has(foundLocation)) {
-      sentLocations.current.add(foundLocation);
-      sendLeadToEmail(name || 'Not provided', phone, summary);
+    // Save lead data
+    leadData.current = { name, phone };
+
+    // Clear previous timer
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current);
     }
+
+    // Start 4 minutes inactivity timer
+    inactivityTimer.current = setTimeout(() => {
+      sendFinalEmail();
+    }, 4 * 60 * 1000); // 4 minutes
+
   }, [messages]);
 
-  // Human-like typing
+  // Reset timer on every new message
+  useEffect(() => {
+    if (!leadData.current || hasSent.current) return;
+
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current);
+    }
+
+    // Restart 4 minutes timer
+    inactivityTimer.current = setTimeout(() => {
+      sendFinalEmail();
+    }, 4 * 60 * 1000);
+  }, [messages]);
+
+  // Human-like typing logic
   useEffect(() => {
     if (messages.length === 0) return;
 
@@ -124,15 +138,18 @@ export default function Chatbot() {
     }
   }, [messages, isLoading]);
 
-  // Reset
+  // Cleanup + Reset
   useEffect(() => {
     if (messages.length === 0) {
       setVisibleMessages([]);
       processedIds.current.clear();
       setShowTyping(false);
       isProcessing.current = false;
-      sentPhone.current = '';
-      sentLocations.current.clear();
+      leadData.current = null;
+      hasSent.current = false;
+      if (inactivityTimer.current) {
+        clearTimeout(inactivityTimer.current);
+      }
     }
   }, [messages.length]);
 
