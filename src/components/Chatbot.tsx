@@ -14,7 +14,7 @@ export default function Chatbot() {
 
   // Lead collection
   const leadData = useRef<{ name: string; phone: string } | null>(null);
-  const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
+  const inactivityTimer = useRef<any>(null);
   const hasSent = useRef(false);
 
   // Auto scroll
