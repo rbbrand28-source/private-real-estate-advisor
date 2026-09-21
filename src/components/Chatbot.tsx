@@ -11,13 +11,73 @@ export default function Chatbot() {
   const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
   const processedIds = useRef<Set<string>>(new Set());
   const isProcessing = useRef(false);
+  const leadSent = useRef(false);
 
   // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [visibleMessages, showTyping]);
 
-  // Main controlled flow
+  // Function to send lead to Formspree
+  const sendLeadToEmail = async (name: string, phone: string, notes: string) => {
+    if (leadSent.current) return;
+    leadSent.current = true;
+
+    try {
+      await fetch('https://formspree.io/f/xzezejdr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          name: name,
+          phone: phone,
+          notes: notes,
+          source: 'Private Real Estate Advisor Chatbot',
+        }),
+      });
+      console.log('Lead sent successfully');
+    } catch (error) {
+      console.error('Failed to send lead:', error);
+    }
+  };
+
+  // Detect Name + Phone from user messages
+  useEffect(() => {
+    if (messages.length === 0 || leadSent.current) return;
+
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastUserMessage) return;
+
+    const text = lastUserMessage.content.toLowerCase();
+
+    // Simple phone number detection (Indian numbers)
+    const phoneMatch = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}/);
+    if (!phoneMatch) return;
+
+    const phone = phoneMatch[0];
+
+    // Try to extract name (very basic)
+    let name = 'Not provided';
+    const nameMatch = lastUserMessage.content.match(/(?:name is|i am|this is|myself)\s+([a-zA-Z\s]{2,30})/i);
+    if (nameMatch) {
+      name = nameMatch[1].trim();
+    } else {
+      // Take first few words as name if no clear pattern
+      const words = lastUserMessage.content.replace(phone, '').trim().split(/\s+/);
+      if (words.length > 0 && words[0].length > 2) {
+        name = words.slice(0, 2).join(' ');
+      }
+    }
+
+    // Collect some context from previous messages
+    const recentMessages = messages.slice(-6).map((m) => `${m.role}: ${m.content}`).join('\n');
+
+    sendLeadToEmail(name, phone, recentMessages);
+  }, [messages]);
+
+  // Main controlled flow for human-like typing
   useEffect(() => {
     if (messages.length === 0) return;
 
@@ -30,7 +90,7 @@ export default function Chatbot() {
       return;
     }
 
-    // Handle assistant message only when fully received
+    // Handle assistant message
     if (
       lastMessage.role === 'assistant' &&
       !processedIds.current.has(lastMessage.id) &&
@@ -45,16 +105,12 @@ export default function Chatbot() {
 
       // Realistic typing speed: 100 words per minute
       let typingDuration = Math.round((wordCount / 100) * 60 * 1000);
-
-      // Set limits
       typingDuration = Math.max(2500, Math.min(typingDuration, 12000));
 
-      // Step 1: Reading delay (2.8 seconds)
+      // Reading delay
       setTimeout(() => {
-        // Step 2: Show typing indicator
         setShowTyping(true);
 
-        // Step 3: Keep typing according to word count
         setTimeout(() => {
           setShowTyping(false);
           setVisibleMessages((prev) => [...prev, lastMessage]);
@@ -71,6 +127,7 @@ export default function Chatbot() {
       processedIds.current.clear();
       setShowTyping(false);
       isProcessing.current = false;
+      leadSent.current = false;
     }
   }, [messages.length]);
 
