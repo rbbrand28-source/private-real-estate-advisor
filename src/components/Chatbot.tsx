@@ -11,7 +11,7 @@ export default function Chatbot() {
   const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
   const processedIds = useRef<Set<string>>(new Set());
   const isProcessing = useRef(false);
-  const leadSent = useRef(false);
+  const lastSentContent = useRef<string>('');
 
   // Auto scroll
   useEffect(() => {
@@ -20,8 +20,9 @@ export default function Chatbot() {
 
   // Function to send lead to Formspree
   const sendLeadToEmail = async (name: string, phone: string, notes: string) => {
-    if (leadSent.current) return;
-    leadSent.current = true;
+    // Avoid sending exact same content again
+    if (notes === lastSentContent.current) return;
+    lastSentContent.current = notes;
 
     try {
       await fetch('https://formspree.io/f/xzezejdr', {
@@ -37,60 +38,61 @@ export default function Chatbot() {
           source: 'Private Real Estate Advisor Chatbot',
         }),
       });
-      console.log('Lead sent successfully');
+      console.log('Lead update sent');
     } catch (error) {
       console.error('Failed to send lead:', error);
     }
   };
 
-  // Detect Name + Phone from user messages
+  // Detect important updates
   useEffect(() => {
-    if (messages.length === 0 || leadSent.current) return;
+    if (messages.length < 2) return;
 
     const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
     if (!lastUserMessage) return;
 
     const text = lastUserMessage.content.toLowerCase();
 
-    // Simple phone number detection (Indian numbers)
+    // Detect phone number
     const phoneMatch = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}/);
-    if (!phoneMatch) return;
+    const hasPhone = !!phoneMatch;
 
-    const phone = phoneMatch[0];
-
-    // Try to extract name (very basic)
+    // Detect possible name
     let name = 'Not provided';
     const nameMatch = lastUserMessage.content.match(/(?:name is|i am|this is|myself)\s+([a-zA-Z\s]{2,30})/i);
     if (nameMatch) {
       name = nameMatch[1].trim();
-    } else {
-      // Take first few words as name if no clear pattern
-      const words = lastUserMessage.content.replace(phone, '').trim().split(/\s+/);
-      if (words.length > 0 && words[0].length > 2) {
-        name = words.slice(0, 2).join(' ');
-      }
     }
 
-    // Collect some context from previous messages
-    const recentMessages = messages.slice(-6).map((m) => `${m.role}: ${m.content}`).join('\n');
+    // If we have phone, or important keywords (location, budget, etc.)
+    const importantKeywords = ['bangalore', 'mumbai', 'delhi', 'pune', 'hyderabad', 'chennai', 'whitefield', 'sarjapur', 'budget', 'crore', 'lakh', 'bhk', 'ready', 'investment', 'self'];
+    const hasImportantInfo = importantKeywords.some(word => text.includes(word));
 
-    sendLeadToEmail(name, phone, recentMessages);
+    if (hasPhone || hasImportantInfo) {
+      const phone = phoneMatch ? phoneMatch[0] : 'Not provided yet';
+
+      // Create a clean summary of recent conversation
+      const recentMessages = messages
+        .slice(-8)
+        .map((m) => `${m.role === 'user' ? 'Client' : 'Advisor'}: ${m.content}`)
+        .join('\n\n');
+
+      sendLeadToEmail(name, phone, recentMessages);
+    }
   }, [messages]);
 
-  // Main controlled flow for human-like typing
+  // Human-like typing logic
   useEffect(() => {
     if (messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
 
-    // Show user messages immediately
     if (lastMessage.role === 'user' && !processedIds.current.has(lastMessage.id)) {
       processedIds.current.add(lastMessage.id);
       setVisibleMessages((prev) => [...prev, lastMessage]);
       return;
     }
 
-    // Handle assistant message
     if (
       lastMessage.role === 'assistant' &&
       !processedIds.current.has(lastMessage.id) &&
@@ -103,11 +105,9 @@ export default function Chatbot() {
       const text = lastMessage.content || '';
       const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
 
-      // Realistic typing speed: 100 words per minute
       let typingDuration = Math.round((wordCount / 100) * 60 * 1000);
       typingDuration = Math.max(2500, Math.min(typingDuration, 12000));
 
-      // Reading delay
       setTimeout(() => {
         setShowTyping(true);
 
@@ -120,14 +120,14 @@ export default function Chatbot() {
     }
   }, [messages, isLoading]);
 
-  // Reset on new chat
+  // Reset
   useEffect(() => {
     if (messages.length === 0) {
       setVisibleMessages([]);
       processedIds.current.clear();
       setShowTyping(false);
       isProcessing.current = false;
-      leadSent.current = false;
+      lastSentContent.current = '';
     }
   }, [messages.length]);
 
@@ -171,7 +171,6 @@ export default function Chatbot() {
           </div>
         ))}
 
-        {/* Typing Indicator */}
         {showTyping && (
           <div className="flex justify-start">
             <div className="bg-white border border-stone-200 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
