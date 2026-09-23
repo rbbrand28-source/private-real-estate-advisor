@@ -12,18 +12,18 @@ export default function Chatbot() {
   const processedIds = useRef<Set<string>>(new Set());
   const isProcessing = useRef(false);
 
-  // Lead collection
+  // Lead system
   const leadData = useRef<{ name: string; phone: string } | null>(null);
-  const inactivityTimer = useRef<any>(null);
   const hasSent = useRef(false);
+  const sendTimer = useRef<any>(null);
 
   // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [visibleMessages, showTyping]);
 
-  // Send final email
-  const sendFinalEmail = async () => {
+  // Send email function
+  const sendLeadEmail = async () => {
     if (!leadData.current || hasSent.current) return;
     hasSent.current = true;
 
@@ -42,16 +42,16 @@ export default function Chatbot() {
           name: leadData.current.name,
           phone: leadData.current.phone,
           notes: summary,
-          source: 'Private Real Estate Advisor Chatbot - Full Conversation',
+          source: 'Private Real Estate Advisor Chatbot',
         }),
       });
-      console.log('Full conversation email sent');
+      console.log('Lead email sent successfully');
     } catch (error) {
-      console.error('Failed to send email:', error);
+      console.error('Failed to send lead:', error);
     }
   };
 
-  // Detect Name + Phone and start inactivity timer
+  // Detect Name + Phone and start 2.5 minute timer
   useEffect(() => {
     if (messages.length === 0 || hasSent.current) return;
 
@@ -60,7 +60,7 @@ export default function Chatbot() {
 
     const text = lastUserMsg.content;
 
-    // Detect phone
+    // Detect phone number
     const phoneMatch = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}/);
     if (!phoneMatch) return;
 
@@ -73,33 +73,19 @@ export default function Chatbot() {
       name = nameMatch[1].trim();
     }
 
-    // Save lead data
+    // Save lead
     leadData.current = { name, phone };
 
-    // Clear previous timer
-    if (inactivityTimer.current) {
-      clearTimeout(inactivityTimer.current);
+    // Clear old timer if exists
+    if (sendTimer.current) {
+      clearTimeout(sendTimer.current);
     }
 
-    // Start 4 minutes inactivity timer
-    inactivityTimer.current = setTimeout(() => {
-      sendFinalEmail();
-    }, 4 * 60 * 1000); // 4 minutes
+    // Start 2.5 minutes timer
+    sendTimer.current = setTimeout(() => {
+      sendLeadEmail();
+    }, 2.5 * 60 * 1000); // 2.5 minutes
 
-  }, [messages]);
-
-  // Reset timer on every new message
-  useEffect(() => {
-    if (!leadData.current || hasSent.current) return;
-
-    if (inactivityTimer.current) {
-      clearTimeout(inactivityTimer.current);
-    }
-
-    // Restart 4 minutes timer
-    inactivityTimer.current = setTimeout(() => {
-      sendFinalEmail();
-    }, 4 * 60 * 1000);
   }, [messages]);
 
   // Human-like typing logic
@@ -138,7 +124,7 @@ export default function Chatbot() {
     }
   }, [messages, isLoading]);
 
-  // Cleanup + Reset
+  // Reset on new chat
   useEffect(() => {
     if (messages.length === 0) {
       setVisibleMessages([]);
@@ -147,9 +133,7 @@ export default function Chatbot() {
       isProcessing.current = false;
       leadData.current = null;
       hasSent.current = false;
-      if (inactivityTimer.current) {
-        clearTimeout(inactivityTimer.current);
-      }
+      if (sendTimer.current) clearTimeout(sendTimer.current);
     }
   }, [messages.length]);
 
